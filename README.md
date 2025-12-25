@@ -25,6 +25,13 @@ Connect the Arduino to the AT89S52 as shown below.
 
 > **⚠️ Important:** Place a **10uF capacitor** between the Arduino's **Reset** and **GND** (Long leg to Reset, short to GND) *after* uploading the ISP sketch. This prevents the Arduino from resetting itself during the upload process.
 
+<a href="https://ibb.co/Y7W1xCMb"><img src="https://i.ibb.co/wNLPfkXY/IMG-5996.avif" alt="IMG-5996" border="0"></a>
+<a href="https://ibb.co/zT3b7PWy"><img src="https://i.ibb.co/4nbMY4w6/IMG-5995.avif" alt="IMG-5995" border="0"></a>
+
+
+
+
+
 ------
 
 ## Step 3: Download AVRDUDE
