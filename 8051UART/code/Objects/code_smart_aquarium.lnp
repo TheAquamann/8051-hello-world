@@ -1,0 +1,3 @@
+".\Objects\main.obj" 
+TO ".\Objects\code_smart_aquarium" 
+PRINT(".\Listings\code_smart_aquarium.m51") RAMSIZE(256) 

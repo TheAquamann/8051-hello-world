@@ -1,0 +1,242 @@
+C51 COMPILER V9.60.7.0   MAIN                                                              12/31/2025 23:02:44 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Objects\main.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\main
+                    -.lst) TABS(2) OBJECT(.\Objects\main.obj)
+
+line level    source
+
+   1          #include <reg52.h>
+   2          #include <stdio.h>
+   3          #include <stdlib.h>
+   4          #include <string.h>
+   5          
+   6          // --- HARDWARE MAPPING ---
+   7          // P2 LEDs used to indicate which device is active
+   8          sbit LED_PUMP   = P2^0;
+   9          sbit LED_LIGHT  = P2^1;
+  10          sbit LED_FEEDER = P2^2;
+  11          sbit LED_DISP   = P2^3;
+  12          
+  13          // --- VARIABLES ---
+  14          char rx_buffer[40];  // Buffer to store incoming frame
+  15          unsigned char rx_index = 0;
+  16          bit frame_received = 0;
+  17          
+  18          // --- FUNCTION PROTOTYPES ---
+  19          void UART_Init();
+  20          void UART_TxChar(char dat);
+  21          void UART_SendString(char *str);
+  22          void DelayMs(unsigned int ms);
+  23          void Process_Frame();
+  24          int Parse_Int(char **str); // Helper to grab next number from string
+  25          
+  26          void main() {
+  27   1          UART_Init();
+  28   1          
+  29   1          // Welcome Message
+  30   1          UART_SendString("SYSTEM READY. Type frame like: <01,01,02>\r\n");
+  31   1          
+  32   1          // Turn off LEDs initially (assuming 1=ON, 0=OFF for your setup)
+  33   1          P2 = 0xFF; 
+  34   1      
+  35   1          while(1) {
+  36   2              if(frame_received) {
+  37   3                  Process_Frame();
+  38   3                  frame_received = 0; // Reset flag
+  39   3                  rx_index = 0;       // Reset buffer
+  40   3              }
+  41   2          }
+  42   1      }
+  43          
+  44          // --- UART INTERRUPT (Receives Data) ---
+  45          void Serial_ISR() interrupt 4 {
+  46   1          char c;
+  47   1          if(RI) {
+  48   2              c = SBUF;
+  49   2              RI = 0;
+  50   2              
+  51   2              // Protocol: Frame starts with '<' and ends with '>'
+  52   2              if(c == '<') {
+  53   3                  rx_index = 0; // Start recording
+  54   3              }
+C51 COMPILER V9.60.7.0   MAIN                                                              12/31/2025 23:02:44 PAGE 2   
+
+  55   2              else if(c == '>') {
+  56   3                  rx_buffer[rx_index] = '\0'; // Null-terminate string
+  57   3                  frame_received = 1;         // Signal main loop
+  58   3              }
+  59   2              else {
+  60   3                  if(rx_index < 39) {
+  61   4                      rx_buffer[rx_index++] = c; // Add char to buffer
+  62   4                  }
+  63   3              }
+  64   2          }
+  65   1      }
+  66          
+  67          // --- COMMAND PROCESSOR ---
+  68          void Process_Frame() {
+  69   1          // Buffer now contains "01,01,02" (without < or >)
+  70   1          char *ptr = rx_buffer;
+  71   1          int deviceCode, stateCode, val1, val2, val3, checksum_received;
+  72   1          int calculated_sum = 0;
+  73   1          
+  74   1          // 1. Parse Device Code
+  75   1          deviceCode = Parse_Int(&ptr);
+  76   1          if(deviceCode == -1) return; // Error
+  77   1          
+  78   1          // 2. Parse State Code
+  79   1          stateCode = Parse_Int(&ptr);
+  80   1          
+  81   1          // 3. Parse Optional Values based on Device Code
+  82   1          // Note: This logic simplifies parsing by attempting to read remaining values
+  83   1          // In a strict implementation, you'd switch(deviceCode) first.
+  84   1          
+  85   1          // Initialize defaults
+  86   1          val1 = 0; val2 = 0; val3 = 0;
+  87   1          
+  88   1          // We calculate checksum as we go. 
+  89   1          // The protocol says Checksum is the LAST field.
+  90   1          // We need to read until we hit the end.
+  91   1          
+  92   1          // Simplified Test Parser:
+  93   1          // We assume the user types exactly what the example frames show.
+  94   1          
+  95   1          // --- PARSING LOGIC SPECIFIC TO EXAMPLES ---
+  96   1          
+  97   1          if (deviceCode == 1) { // PUMP: <01,01,CHK>
+  98   2              checksum_received = Parse_Int(&ptr); // The 3rd number is checksum
+  99   2              calculated_sum = (deviceCode + stateCode) % 256;
+ 100   2              
+ 101   2              if(calculated_sum == checksum_received) {
+ 102   3                  LED_PUMP = (stateCode == 1) ? 0 : 1; // 1=ON, 0=OFF
+ 103   3                  UART_SendString("ACK: Pump Updated\r\n");
+ 104   3                  UART_SendString("<ACK>");
+ 105   3              } else goto CHECKSUM_ERR;
+ 106   2          }
+ 107   1          
+ 108   1          else if (deviceCode == 2) { // LIGHT: <02,01,VAL,CHK>
+ 109   2              val1 = Parse_Int(&ptr); // Brightness
+ 110   2              checksum_received = Parse_Int(&ptr);
+ 111   2              
+ 112   2              calculated_sum = (deviceCode + stateCode + val1) % 256;
+ 113   2              
+ 114   2              if(calculated_sum == checksum_received) {
+ 115   3                  LED_LIGHT = (stateCode == 1);
+ 116   3                  UART_SendString("ACK: Light Set. Brightness: ");
+C51 COMPILER V9.60.7.0   MAIN                                                              12/31/2025 23:02:44 PAGE 3   
+
+ 117   3                  // (Print brightness code omitted for brevity in pure 8051, sending static text)
+ 118   3                  UART_SendString("UPDATED\r\n"); 
+ 119   3                  UART_SendString("<ACK>");
+ 120   3              } else goto CHECKSUM_ERR;
+ 121   2          }
+ 122   1          
+ 123   1          else if (deviceCode == 3) { // FEEDER: <03,01,QTY,CHK>
+ 124   2              val1 = Parse_Int(&ptr); // Qty
+ 125   2              checksum_received = Parse_Int(&ptr);
+ 126   2              
+ 127   2              calculated_sum = (deviceCode + stateCode + val1) % 256;
+ 128   2              
+ 129   2              if(calculated_sum == checksum_received) {
+ 130   3                  LED_FEEDER = 1; 
+ 131   3                  DelayMs(500); // Simulate feeding
+ 132   3                  LED_FEEDER = 0;
+ 133   3                  UART_SendString("ACK: Feeding Done\r\n");
+ 134   3                  UART_SendString("<ACK>");
+ 135   3              } else goto CHECKSUM_ERR;
+ 136   2          }
+ 137   1          
+ 138   1          else if (deviceCode == 5) { // DISPLAY: <05,01,HR,MIN,QTY,CHK>
+ 139   2              val1 = Parse_Int(&ptr); // Hour
+ 140   2              val2 = Parse_Int(&ptr); // Min
+ 141   2              val3 = Parse_Int(&ptr); // Qty
+ 142   2              checksum_received = Parse_Int(&ptr);
+ 143   2              
+ 144   2              calculated_sum = (deviceCode + stateCode + val1 + val2 + val3) % 256;
+ 145   2              
+ 146   2              if(calculated_sum == checksum_received) {
+ 147   3                  LED_DISP = !LED_DISP; // Toggle to show update
+ 148   3                  UART_SendString("ACK: Display Schedule Updated\r\n");
+ 149   3                  UART_SendString("<ACK>");
+ 150   3              } else goto CHECKSUM_ERR;
+ 151   2          }
+ 152   1          
+ 153   1          else {
+ 154   2              UART_SendString("ERR: Unknown Device\r\n");
+ 155   2              UART_SendString("<ERR>");
+ 156   2          }
+ 157   1          return;
+ 158   1      
+ 159   1      CHECKSUM_ERR:
+ 160   1          UART_SendString("ERR: Checksum Fail\r\n");
+ 161   1          UART_SendString("<ERR>");
+ 162   1      }
+ 163          
+ 164          // --- HELPER FUNCTIONS ---
+ 165          
+ 166          // Parses the next integer from the comma-separated string
+ 167          // Updates the pointer to the next position
+ 168          int Parse_Int(char **str) {
+ 169   1          int val = 0;
+ 170   1          char *s = *str;
+ 171   1          
+ 172   1          if(*s == '\0') return -1; // End of string
+ 173   1          
+ 174   1          // Skip commas
+ 175   1          while(*s == ',') s++;
+ 176   1          
+ 177   1          // Read digits
+ 178   1          while(*s >= '0' && *s <= '9') {
+C51 COMPILER V9.60.7.0   MAIN                                                              12/31/2025 23:02:44 PAGE 4   
+
+ 179   2              val = (val * 10) + (*s - '0');
+ 180   2              s++;
+ 181   2          }
+ 182   1          
+ 183   1          *str = s; // Update original pointer
+ 184   1          return val;
+ 185   1      }
+ 186          
+ 187          void UART_Init() {
+ 188   1          TMOD = 0x20;    // Timer 1 Mode 2
+ 189   1          TH1 = 0xFD;     // 9600 Baud @ 11.0592MHz
+ 190   1          SCON = 0x50;    // Mode 1, REN Enabled
+ 191   1          EA = 1;         // Enable Global Interrupts
+ 192   1          ES = 1;         // Enable Serial Interrupts
+ 193   1          TR1 = 1;        // Start Timer 1
+ 194   1      }
+ 195          
+ 196          void UART_TxChar(char dat) {
+ 197   1          SBUF = dat;
+ 198   1          while(!TI);
+ 199   1          TI = 0;
+ 200   1      }
+ 201          
+ 202          void UART_SendString(char *str) {
+ 203   1          while(*str) {
+ 204   2              UART_TxChar(*str++);
+ 205   2          }
+ 206   1      }
+ 207          
+ 208          void DelayMs(unsigned int ms) {
+ 209   1          unsigned int i, j;
+ 210   1          for(i=0; i<ms; i++)
+ 211   1              for(j=0; j<120; j++);
+ 212   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    801    ----
+   CONSTANT SIZE    =    210    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     41      28
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      1    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
